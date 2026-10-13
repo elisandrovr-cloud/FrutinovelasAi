@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 330 40% 98%;
+    --foreground: 300 30% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 300 30% 12%;
+    --primary: 330 80% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 95% 92%;
+    --secondary-foreground: 300 30% 15%;
+    --muted: 320 25% 94%;
+    --muted-foreground: 300 10% 40%;
+    --accent: 28 95% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 320 20% 88%;
+    --input: 320 20% 85%;
+    --ring: 330 80% 45%;
+    --gold: 44 95% 55%;
+    --radius: 0.9rem;
+  }
+  .dark {
+    --background: 300 35% 7%;
+    --foreground: 320 20% 95%;
+    --card: 300 30% 10%;
+    --card-foreground: 320 20% 95%;
+    --primary: 330 85% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 300 25% 16%;
+    --secondary-foreground: 320 20% 95%;
+    --muted: 300 25% 15%;
+    --muted-foreground: 320 10% 70%;
+    --accent: 28 95% 58%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 300 20% 20%;
+    --input: 300 20% 22%;
+    --ring: 330 85% 58%;
+    --gold: 44 95% 60%;
+  }
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground antialiased; }
+}
+
+@layer utilities {
+  .bg-telenovela {
+    background:
+      radial-gradient(1200px 500px at 10% -10%, hsl(330 85% 55% / 0.25), transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, hsl(44 95% 55% / 0.25), transparent 60%),
+      radial-gradient(800px 400px at 50% 120%, hsl(150 60% 45% / 0.15), transparent 60%);
+  }
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary via-accent to-gold bg-clip-text text-transparent;
+  }
+}

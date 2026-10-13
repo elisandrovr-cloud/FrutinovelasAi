@@ -1,0 +1,221 @@
+// FrutiNovela AI — esquema de base de datos (PostgreSQL / Supabase)
+// Las claves *Key apuntan a objetos en R2/S3 (nunca URLs firmadas: caducan).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum NovelaStatus {
+  DRAFT
+  SCRIPTING
+  SCRIPT_READY
+  DESIGNING
+  DESIGN_READY
+  PRODUCING
+  PAUSED
+  COMPLETED
+  FAILED
+}
+
+enum ProductionMode {
+  NONE
+  ALL // al terminar un capítulo se encola el siguiente
+  SINGLE // solo el capítulo pedido
+}
+
+enum ChapterStatus {
+  PENDING // solo outline
+  SCRIPTED // guion detallado listo
+  QUEUED
+  RENDERING
+  DONE
+  FAILED
+}
+
+enum AssetStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+enum ExportKind {
+  ZIP
+  LONG_VIDEO
+  VERTICAL_SERIES
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+model Novela {
+  id             String         @id @default(cuid())
+  ownerId        String // id anónimo del navegador o user id de Supabase Auth
+  prompt         String
+  genres         String[]
+  chapterCount   Int
+  totalMinutes   Int
+  aspectRatio    String         @default("9:16")
+  subtitles      Boolean        @default(true)
+  accent         String         @default("mexicano")
+  status         NovelaStatus   @default(DRAFT)
+  productionMode ProductionMode @default(NONE)
+  title          String         @default("Nueva FrutiNovela")
+  tagline        String?
+  logline        String?
+  /// Biblia completa (StoryBible) devuelta por Claude, editable.
+  bible          Json?
+  /// Semilla maestra: de ella se derivan las semillas de personajes y escenarios.
+  masterSeed     Int
+  coverKey       String?
+  error          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  characters Character[]
+  sets       SetLocation[]
+  chapters   Chapter[]
+  exports    Export[]
+
+  @@index([ownerId, createdAt])
+}
+
+model Character {
+  id        String   @id @default(cuid())
+  novelaId  String
+  key       String
+  name      String
+  fruit     String
+  role      String
+  /// BibleCharacter (personalidad, voz, visual) — fuente de verdad textual.
+  bible     Json
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  novela   Novela             @relation(fields: [novelaId], references: [id], onDelete: Cascade)
+  versions CharacterVersion[]
+
+  @@unique([novelaId, key])
+}
+
+/// Cada cambio de diseño o de voz crea una versión nueva. Un capítulo usa la
+/// versión con mayor effectiveFromChapter <= número de capítulo.
+model CharacterVersion {
+  id                   String      @id @default(cuid())
+  characterId          String
+  version              Int
+  effectiveFromChapter Int         @default(1)
+  visual               Json
+  /// "ADN" textual congelado del personaje que se inyecta en cada prompt.
+  dnaPrompt            String
+  seed                 Int
+  referenceImageKey    String? // vista frontal 3/4, fondo neutro (ancla principal)
+  turnaroundKey        String? // hoja de giro frente/perfil/espalda
+  expressionSheetKey   String? // hoja de expresiones
+  voiceId              String?
+  voiceName            String?
+  voiceSettings        Json
+  voicePreviewKey      String?
+  status               AssetStatus @default(PENDING)
+  error                String?
+  createdAt            DateTime    @default(now())
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, version])
+}
+
+model SetLocation {
+  id                String  @id @default(cuid())
+  novelaId          String
+  key               String
+  name              String
+  description       String
+  seed              Int
+  referenceImageKey String?
+
+  novela Novela @relation(fields: [novelaId], references: [id], onDelete: Cascade)
+
+  @@unique([novelaId, key])
+}
+
+model Chapter {
+  id           String        @id @default(cuid())
+  novelaId     String
+  number       Int
+  title        String
+  outline      Json
+  /// ChapterScript (escenas, planos, diálogos, endState). Editable.
+  script       Json?
+  /// true si el guion se editó después de renderizar
+  scriptStale  Boolean       @default(false)
+  status       ChapterStatus @default(PENDING)
+  progress     Int           @default(0)
+  currentStep  String?
+  videoKey     String? // master horizontal/vertical según aspectRatio
+  verticalKey  String? // versión 9:16 con cartelas para TikTok/Reels/Shorts
+  subtitlesKey String?
+  thumbnailKey String?
+  /// Último fotograma: ancla visual del primer plano del capítulo siguiente.
+  lastFrameKey String?
+  durationSec  Float?
+  attempts     Int           @default(0)
+  error        String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  novela Novela @relation(fields: [novelaId], references: [id], onDelete: Cascade)
+  shots  Shot[]
+
+  @@unique([novelaId, number])
+}
+
+model Shot {
+  id             String      @id @default(cuid())
+  chapterId      String
+  order          Int
+  sceneNumber    Int
+  shotNumber     Int
+  /// Shot + datos de escena desnormalizados (setKey, música, hora del día)
+  spec           Json
+  keyframePrompt String?
+  videoPrompt    String?
+  keyframeKey    String?
+  videoKey       String?
+  audioKey       String?
+  lipsyncKey     String?
+  finalKey       String?
+  /// Timings de diálogo para subtítulos: [{start,end,text,characterKey}]
+  cues           Json?
+  durationSec    Float?
+  provider       String?
+  providerTaskId String?
+  status         AssetStatus @default(PENDING)
+  error          String?
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterId, order])
+}
+
+model Export {
+  id        String     @id @default(cuid())
+  novelaId  String
+  kind      ExportKind
+  status    JobStatus  @default(QUEUED)
+  fileKey   String?
+  error     String?
+  createdAt DateTime   @default(now())
+
+  novela Novela @relation(fields: [novelaId], references: [id], onDelete: Cascade)
+}
