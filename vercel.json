@@ -4,7 +4,8 @@
     "api": {
       "root": "apps/api",
       "framework": "fastify",
-      "entrypoint": "src/server.ts"
+      "entrypoint": "src/vercel.ts",
+      "buildCommand": "npm run build:vercel"
     },
     "web": {
       "root": "apps/web",
@@ -12,7 +13,17 @@
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": { "service": "api" } },
-    { "source": "/(.*)", "destination": { "service": "web" } }
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "api"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
   ]
 }
