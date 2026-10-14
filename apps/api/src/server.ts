@@ -9,6 +9,10 @@ const app = Fastify({
 });
 
 await app.register(cors, { origin: env.WEB_ORIGIN.split(","), credentials: true });
-await app.register(routes);
+// Todas las rutas cuelgan de /api: en Vercel la rewrite "/api/(.*)" llega con la ruta completa,
+// y en local/Docker se mantiene el mismo contrato para que el cliente no cambie.
+await app.register(routes, { prefix: "/api" });
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });
+
+export default app;

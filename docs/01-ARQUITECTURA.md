@@ -254,26 +254,28 @@ Puntos de diseño:
 
 ## 1.6 API REST
 
+Todas las rutas cuelgan de **`/api`** (mismo contrato en local, Docker y Vercel, donde la rewrite `/api/(.*)` envía el tráfico al servicio `api`).
+
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/novelas` | Historial del propietario (`x-owner-id`) |
-| POST | `/novelas` | Crea y lanza el guion (`CreateNovelaSchema`) |
-| GET | `/novelas/:id` | Novela completa (biblia, personajes, capítulos, exports) |
-| PATCH | `/novelas/:id` | Título, tagline, subtítulos |
-| DELETE | `/novelas/:id` | Borra todo |
-| POST | `/novelas/:id/script` | Reescribe biblia + todos los capítulos |
-| GET | `/novelas/:id/chapters/:n` | Capítulo con planos (miniaturas en vivo) |
-| PUT | `/novelas/:id/chapters/:n/script` | Guarda el guion editado (validado y normalizado) |
-| POST | `/novelas/:id/chapters/:n/regenerate-script` | `{cascade}` reescribe este (y los siguientes) |
-| POST | `/novelas/:id/design` | Diseña personajes y escenarios `{characterIds?}` |
-| POST | `/characters/:id/approve` | Aprueba el diseño vigente |
-| POST | `/characters/:id/regenerate` | Nueva versión con otra semilla |
-| PATCH | `/characters/:id` | Cambia visual/voz `{effectiveFromChapter}` → nueva versión |
-| GET | `/voices` | Catálogo de voces del proveedor TTS |
-| POST | `/novelas/:id/produce` | `{mode: "ALL" \| "SINGLE", number?}` |
-| POST | `/novelas/:id/pause` | Pausa al acabar el plano en curso |
-| POST | `/novelas/:id/exports` | `{kind: "ZIP" \| "LONG_VIDEO" \| "VERTICAL_SERIES"}` |
-| GET | `/files/*` | Solo `STORAGE_DRIVER=local`, con soporte Range |
+| GET | `/api/novelas` | Historial del propietario (`x-owner-id`) |
+| POST | `/api/novelas` | Crea y lanza el guion (`CreateNovelaSchema`) |
+| GET | `/api/novelas/:id` | Novela completa (biblia, personajes, capítulos, exports) |
+| PATCH | `/api/novelas/:id` | Título, tagline, subtítulos |
+| DELETE | `/api/novelas/:id` | Borra todo |
+| POST | `/api/novelas/:id/script` | Reescribe biblia + todos los capítulos |
+| GET | `/api/novelas/:id/chapters/:n` | Capítulo con planos (miniaturas en vivo) |
+| PUT | `/api/novelas/:id/chapters/:n/script` | Guarda el guion editado (validado y normalizado) |
+| POST | `/api/novelas/:id/chapters/:n/regenerate-script` | `{cascade}` reescribe este (y los siguientes) |
+| POST | `/api/novelas/:id/design` | Diseña personajes y escenarios `{characterIds?}` |
+| POST | `/api/characters/:id/approve` | Aprueba el diseño vigente |
+| POST | `/api/characters/:id/regenerate` | Nueva versión con otra semilla |
+| PATCH | `/api/characters/:id` | Cambia visual/voz `{effectiveFromChapter}` → nueva versión |
+| GET | `/api/voices` | Catálogo de voces del proveedor TTS |
+| POST | `/api/novelas/:id/produce` | `{mode: "ALL" \| "SINGLE", number?}` |
+| POST | `/api/novelas/:id/pause` | Pausa al acabar el plano en curso |
+| POST | `/api/novelas/:id/exports` | `{kind: "ZIP" \| "LONG_VIDEO" \| "VERTICAL_SERIES"}` |
+| GET | `/api/files/*` | Solo `STORAGE_DRIVER=local`, con soporte Range |
 
 ## 1.7 Escalado y costes
 

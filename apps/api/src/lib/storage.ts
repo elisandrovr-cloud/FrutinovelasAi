@@ -127,7 +127,7 @@ export async function urlFor(key: string | null | undefined, expiresIn = 60 * 60
     if (env.S3_PUBLIC_BASE_URL) return `${env.S3_PUBLIC_BASE_URL.replace(/\/$/, "")}/${key}`;
     return getSignedUrl(s3, new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }), { expiresIn });
   }
-  return `${env.PUBLIC_API_URL}/files/${key}`;
+  return `${env.PUBLIC_API_URL}/api/files/${key}`;
 }
 
 /**

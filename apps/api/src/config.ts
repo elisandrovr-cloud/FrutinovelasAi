@@ -9,6 +9,7 @@ const bool = z
 const EnvSchema = z.object({
   NODE_ENV: z.string().default("development"),
   PORT: z.coerce.number().default(4000),
+  /** Origen público donde se sirve /api (en Vercel, el dominio del proyecto). */
   PUBLIC_API_URL: z.string().default("http://localhost:4000"),
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
   DATABASE_URL: z.string(),

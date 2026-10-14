@@ -95,7 +95,7 @@ Una única imagen (`apps/api/Dockerfile`, incluye ffmpeg y fuentes) con dos serv
 | `api` | por defecto (`prisma migrate deploy && node dist/server.js`) | 0.5 vCPU · 512 MB |
 | `worker` | `node dist/worker.js` | 2 vCPU · 2–4 GB RAM · 10 GB de disco temporal |
 
-Variables comunes: todas las de `apps/api/.env.example` con `NODE_ENV=production`, `STORAGE_DRIVER=s3`, `PUBLIC_API_URL=https://api.tudominio.com`, `WEB_ORIGIN=https://tu-app.vercel.app` (admite varias separadas por coma).
+Variables comunes: todas las de `apps/api/.env.example` con `NODE_ENV=production`, `STORAGE_DRIVER=s3`, `PUBLIC_API_URL=https://api.tudominio.com` (origen; las rutas viven en `/api`), `WEB_ORIGIN=https://tu-app.vercel.app` (admite varias separadas por coma).
 
 - **Railway**: *New → Deploy from repo*, *Dockerfile path* `apps/api/Dockerfile`, *root* el repo. Duplica el servicio para el worker y cambia *Start command*.
 - **Fly.io**: `fly launch --dockerfile apps/api/Dockerfile`, y en `fly.toml` dos `[processes]`: `api = "sh -c 'npx prisma migrate deploy && node dist/server.js'"`, `worker = "node dist/worker.js"`; `fly scale count worker=2`.
@@ -105,11 +105,23 @@ El worker **no** puede ser serverless: un capítulo tarda de minutos a decenas d
 
 Ajuste de throughput: `SHOT_CONCURRENCY` (planos simultáneos por capítulo) × `CHAPTER_CONCURRENCY` (capítulos de novelas distintas por réplica) × réplicas ≤ límite de concurrencia de tu cuenta en Runway/Kling.
 
-### Frontend — Vercel
+### Web + API en un solo proyecto de Vercel (services)
 
-1. *New Project* → importa el repo → **Root Directory** `apps/web` (Vercel detecta el monorepo y los workspaces).
-2. Variable `NEXT_PUBLIC_API_URL=https://api.tudominio.com`.
-3. Deploy. (Alternativa: `apps/web/Dockerfile` con `output: "standalone"` en cualquier host de contenedores.)
+`vercel.json` en la raíz define dos servicios del mismo proyecto y un único dominio:
+
+| Servicio | Raíz | Público en | Notas |
+|---|---|---|---|
+| `web` | `apps/web` (Next.js) | `/(.*)` | Llama a la API por ruta relativa `/api/...` (deja `NEXT_PUBLIC_API_URL` vacío) |
+| `api` | `apps/api` (Fastify, `src/server.ts`) | `/api/(.*)` | Todas sus rutas ya llevan el prefijo `/api` |
+
+No hay *bindings*: ningún servicio llama a otro desde el servidor; el navegador habla con la API a través de la rewrite pública.
+
+1. *New Project* → importa el repo con **Root Directory = raíz del repo** (donde está `vercel.json`).
+2. Variables de entorno del proyecto: todas las de `apps/api/.env.example` con `STORAGE_DRIVER=s3`, `PUBLIC_API_URL=https://<tu-dominio>` y `WEB_ORIGIN=https://<tu-dominio>`. Prisma Client se genera en el `postinstall` de `apps/api`.
+3. Pruébalo en local con `vercel dev` (levanta ambos servicios con el enrutado real).
+4. **El worker no corre en Vercel**: los capítulos tardan minutos y usan ffmpeg. Despliega `apps/api/Dockerfile` con `node dist/worker.js` en Railway / Fly.io / Render (sección anterior), apuntando a la misma Postgres, Redis y R2. La función `api` de Vercel solo encola jobs y lee la BD.
+
+Alternativas: solo la web en Vercel (Root Directory `apps/web`, `NEXT_PUBLIC_API_URL=https://api.tudominio.com`) con la API en el contenedor, o `apps/web/Dockerfile` (`output: "standalone"`) en cualquier host.
 
 ## 4.4 Checklist de puesta en producción
 

@@ -12,7 +12,11 @@ import type {
   VoiceOptionDTO,
 } from "@fruti/shared";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+/**
+ * Origen de la API. Vacío = mismo dominio (Vercel enruta /api/* al servicio "api").
+ * Con `npm run dev:web` + `npm run dev:api` por separado: NEXT_PUBLIC_API_URL=http://localhost:4000
+ */
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 
 /** Id anónimo por navegador para el historial (sustituible por Supabase Auth). */
 function ownerId() {
@@ -33,7 +37,7 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, ...rest } = init;
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${API_URL}/api${path}`, {
     ...rest,
     headers: { "x-owner-id": ownerId(), ...(json !== undefined ? { "content-type": "application/json" } : {}), ...rest.headers },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
