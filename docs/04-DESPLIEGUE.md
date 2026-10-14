@@ -107,31 +107,29 @@ Ajuste de throughput: `SHOT_CONCURRENCY` (planos simultáneos por capítulo) × 
 
 ### Web + API en un solo proyecto de Vercel (services)
 
-`vercel.json` en la raíz define dos servicios del mismo proyecto y un único dominio:
+`vercel.json` define dos servicios en un único dominio:
 
-| Servicio | Raíz | Público en | Notas |
+| Servicio | Raíz | Público en | Función |
 |---|---|---|---|
-| `web` | `apps/web` (Next.js) | `/(.*)` | Llama a la API por ruta relativa `/api/...` (deja `NEXT_PUBLIC_API_URL` vacío) |
-| `api` | `apps/api` (Fastify, `src/server.ts`) | `/api/(.*)` | Todas sus rutas ya llevan el prefijo `/api` |
+| `web` | `apps/web` (Next.js) | `/(.*)` | llama a `/api/...` del mismo dominio |
+| `api` | `apps/api` → `src/vercel.ts` | `/api/(.*)` | handler serverless `(req, res)` empaquetado en `dist/index.mjs` por `npm run build:vercel` |
 
-No hay *bindings*: ningún servicio llama a otro desde el servidor; el navegador habla con la API a través de la rewrite pública.
+El build del servicio `api` (`scripts/vercel-build.mjs`) genera Prisma Client, **aplica las migraciones automáticamente** si hay base de datos y empaqueta la función. No hay que ejecutar nada a mano.
 
-1. *New Project* → importa el repo con **Root Directory = raíz del repo** (donde está `vercel.json`).
-2. Variables de entorno del proyecto: todas las de `apps/api/.env.example` con `STORAGE_DRIVER=s3`, `PUBLIC_API_URL=https://<tu-dominio>` y `WEB_ORIGIN=https://<tu-dominio>`. Prisma Client se genera en el `postinstall` de `apps/api`.
-3. Pruébalo en local con `vercel dev` (levanta ambos servicios con el enrutado real).
-   Tras desplegar, abre `https://<tu-dominio>/api/health`: devuelve `missing` (variables obligatorias que faltan: `DATABASE_URL`, `REDIS_URL` y, con `STORAGE_DRIVER=s3`, las credenciales S3) y `warnings`. Mientras falte alguna, toda la API responde **503 con el nombre de la variable** en vez de un 500 genérico.
+**Pasos (una sola vez):**
 
-   | Variable obligatoria en Vercel | Ejemplo |
-   |---|---|
-   | `DATABASE_URL` | pooler de Supabase `…:6543/postgres?pgbouncer=true&connection_limit=5` |
-   | `DIRECT_URL` | conexión directa `…:5432/postgres` (migraciones) |
-   | `REDIS_URL` | `rediss://default:<pass>@<host>.upstash.io:6379` |
-   | `STORAGE_DRIVER` + `S3_*` | `s3` + credenciales de R2 |
+1. **Base de datos** — Vercel → *Storage* / *Marketplace* → **Neon** (o Supabase) → *Connect to project*. Inyecta `DATABASE_URL` / `POSTGRES_PRISMA_URL` / `POSTGRES_URL_NON_POOLING`; la API acepta cualquiera de ellas.
+2. **Redis** — Vercel → *Marketplace* → **Upstash for Redis** → *Connect to project*. Inyecta `KV_URL` / `REDIS_URL` (`rediss://…`); también se aceptan ambas.
+3. **Almacenamiento** — crea un bucket en Cloudflare R2 (sección anterior) y añade en Vercel `STORAGE_DRIVER=s3`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BASE_URL`.
+4. **Claves de IA** — `ANTHROPIC_API_KEY` (y las de los proveedores que actives) en Vercel.
+5. **Redeploy** en Vercel (las variables nuevas solo se aplican al redesplegar).
+6. **Worker** — Render → *New → Blueprint* → este repositorio (usa `render.yaml`). Pega los mismos valores de BD, Redis, R2 y claves que tienes en Vercel (*Settings → Environment Variables → copiar valor*).
+7. Abre `https://<tu-dominio>/api/health`:
+   - `missing`: variables obligatorias que faltan (mientras haya alguna, la API responde 503 indicándolas);
+   - `warnings`: p. ej. *“No hay ningún worker conectado”* si el paso 6 no está hecho;
+   - `worker: true` cuando el worker está vivo (late cada 30 s en Redis).
 
-   Ejecuta las migraciones una vez desde tu máquina (`npm run db:deploy -w @fruti/api` con `DIRECT_URL`) antes de usar la app.
-4. **El worker no corre en Vercel**: los capítulos tardan minutos y usan ffmpeg. Despliega `apps/api/Dockerfile` con `node dist/worker.js` en Railway / Fly.io / Render (sección anterior), apuntando a la misma Postgres, Redis y R2. La función `api` de Vercel solo encola jobs y lee la BD.
-
-Alternativas: solo la web en Vercel (Root Directory `apps/web`, `NEXT_PUBLIC_API_URL=https://api.tudominio.com`) con la API en el contenedor, o `apps/web/Dockerfile` (`output: "standalone"`) en cualquier host.
+La web muestra un aviso en la parte superior mientras haya problemas de configuración.
 
 ## 4.4 Checklist de puesta en producción
 

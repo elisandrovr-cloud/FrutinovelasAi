@@ -56,6 +56,19 @@ for (const q of [scriptQueue, designQueue, productionQueue, exportQueue]) {
 
 export class QueueUnavailableError extends Error {}
 
+/** Latido del worker en Redis: la API lo usa para avisar si no hay ningún worker procesando. */
+export const WORKER_HEARTBEAT_KEY = "fruti:worker:heartbeat";
+
+export async function workerAlive(): Promise<boolean | null> {
+  try {
+    const client = await withQueue(() => scriptQueue.client, 3000);
+    const last = Number(await client.get(WORKER_HEARTBEAT_KEY));
+    return Number.isFinite(last) && Date.now() - last < 90_000;
+  } catch {
+    return null; // Redis no accesible
+  }
+}
+
 /** Encola con timeout: si Redis no contesta, error claro en vez de petición colgada. */
 export async function withQueue<T>(fn: () => Promise<T>, ms = 5000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;

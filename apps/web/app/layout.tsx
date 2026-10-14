@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { Toaster } from "sonner";
+import { ServerStatus } from "@/components/server-status";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" className={`${sans.variable} ${display.variable}`}>
       <body className="min-h-screen bg-telenovela font-sans">
         <SiteHeader />
+        <ServerStatus />
         <main className="container pb-24 pt-8">{children}</main>
         <Toaster richColors position="top-center" />
       </body>

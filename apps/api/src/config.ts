@@ -1,6 +1,15 @@
 import "dotenv/config";
 import { z } from "zod/v4";
 
+/**
+ * Nombres alternativos que inyectan las integraciones del Marketplace de Vercel
+ * (Neon / Supabase / Prisma Postgres y Upstash Redis): así basta con conectar la
+ * integración, sin copiar variables a mano.
+ */
+const first = (...names: string[]) => names.map((n) => process.env[n]).find((v) => v && v.trim());
+process.env.DATABASE_URL ||= first("POSTGRES_PRISMA_URL", "POSTGRES_URL", "SUPABASE_DB_URL");
+process.env.REDIS_URL ||= first("KV_URL", "UPSTASH_REDIS_URL", "REDIS_TLS_URL");
+
 const bool = z
   .string()
   .optional()

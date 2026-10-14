@@ -8,7 +8,7 @@ FROM base AS build
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
-RUN npm ci -w @fruti/api -w @fruti/shared --include-workspace-root
+RUN npm ci -w @fruti/api -w @fruti/shared --include-workspace-root --ignore-scripts
 COPY packages/shared packages/shared
 COPY apps/api apps/api
 RUN npm run db:generate -w @fruti/api && npm run build -w @fruti/api

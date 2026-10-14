@@ -1,0 +1,49 @@
+# Worker de FrutiNovela en Render (Blueprint): Dashboard → New → Blueprint → este repo.
+# Usa la MISMA base de datos, Redis y bucket R2 que el proyecto de Vercel:
+# Render pedirá los valores marcados con `sync: false` al crear el servicio.
+services:
+  - type: worker
+    name: frutinovela-worker
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    dockerCommand: node dist/worker.js
+    plan: standard # 2 GB RAM: ffmpeg + varios planos en paralelo
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: auto
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_PUBLIC_BASE_URL
+        sync: false
+      - key: LLM_PROVIDER
+        value: claude
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: IMAGE_PROVIDER
+        value: mock
+      - key: VIDEO_PROVIDER
+        value: mock
+      - key: TTS_PROVIDER
+        value: mock
+      - key: MUSIC_PROVIDER
+        value: mock
+      - key: SHOT_CONCURRENCY
+        value: "2"
+      - key: CHAPTER_CONCURRENCY
+        value: "1"

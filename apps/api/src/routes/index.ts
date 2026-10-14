@@ -10,7 +10,7 @@ import { env, envWarnings, missingEnv } from "../config";
 import { prisma } from "../lib/db";
 import { randomSeed } from "../lib/seed";
 import { contentTypeFor, localPathFor } from "../lib/storage";
-import { designQueue, withQueue, QueueUnavailableError } from "../queues";
+import { designQueue, withQueue, QueueUnavailableError, workerAlive } from "../queues";
 import { listVoices, regenerateCharacter, updateCharacter } from "../services/characters";
 import {
   ConflictError,
@@ -74,7 +74,14 @@ export async function routes(app: FastifyInstance) {
 
   app.get("/health", async (_req, reply) => {
     const ok = missingEnv.length === 0;
-    return reply.status(ok ? 200 : 503).send({ ok, missing: missingEnv, warnings: envWarnings });
+    const warnings = [...envWarnings];
+    let worker: boolean | null = null;
+    if (ok) {
+      worker = await workerAlive();
+      if (worker === null) warnings.push("Redis no responde: revisa REDIS_URL");
+      else if (!worker) warnings.push("No hay ningún worker conectado: las novelas no avanzarán hasta desplegar el worker (node dist/worker.js)");
+    }
+    return reply.status(ok ? 200 : 503).send({ ok, missing: missingEnv, warnings, worker });
   });
 
   // ------------------------------------------------------------------ novelas

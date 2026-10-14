@@ -7,7 +7,7 @@ import { UnrecoverableError, Worker, type Job } from "bullmq";
 import { env } from "./config";
 import { prisma } from "./lib/db";
 import { ProviderError } from "./lib/http";
-import { connection, type DesignJob, type ExportJob, type ProductionJob, type ScriptJob } from "./queues";
+import { connection, scriptQueue, WORKER_HEARTBEAT_KEY, type DesignJob, type ExportJob, type ProductionJob, type ScriptJob } from "./queues";
 import { designCharacterVersion, designSet } from "./services/characters";
 import { runExport } from "./services/export";
 import { onBibleReady, onChapterProduced, onChapterScripted, onDesignProgress } from "./services/orchestrator";
@@ -112,7 +112,20 @@ exportWorker.on("failed", async (job, err) => {
 
 console.log("🍍 FrutiNovela workers listos: script, design, production, export");
 
+// Latido cada 30 s: /api/health considera muerto al worker si el último tiene más de 90 s
+const heartbeat = async () => {
+  try {
+    const client = await scriptQueue.client;
+    await client.set(WORKER_HEARTBEAT_KEY, String(Date.now()));
+  } catch (err) {
+    console.error("[worker] latido fallido", (err as Error).message);
+  }
+};
+await heartbeat();
+const heartbeatTimer = setInterval(heartbeat, 30_000);
+
 const shutdown = async () => {
+  clearInterval(heartbeatTimer);
   await Promise.all([scriptWorker.close(), designWorker.close(), productionWorker.close(), exportWorker.close()]);
   await prisma.$disconnect();
   process.exit(0);
