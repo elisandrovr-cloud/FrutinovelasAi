@@ -6,9 +6,16 @@ import { z } from "zod/v4";
  * (Neon / Supabase / Prisma Postgres y Upstash Redis): así basta con conectar la
  * integración, sin copiar variables a mano.
  */
-const first = (...names: string[]) => names.map((n) => process.env[n]).find((v) => v && v.trim());
-process.env.DATABASE_URL ||= first("POSTGRES_PRISMA_URL", "POSTGRES_URL", "SUPABASE_DB_URL");
-process.env.REDIS_URL ||= first("KV_URL", "UPSTASH_REDIS_URL", "REDIS_TLS_URL");
+const isSet = (v: string | undefined): v is string => Boolean(v && v.trim() && v !== "undefined");
+function alias(target: string, ...names: string[]) {
+  if (isSet(process.env[target])) return;
+  const value = names.map((n) => process.env[n]).find(isSet);
+  // Ojo: asignar undefined a process.env guarda el texto "undefined"
+  if (value) process.env[target] = value;
+  else delete process.env[target];
+}
+alias("DATABASE_URL", "POSTGRES_PRISMA_URL", "POSTGRES_URL", "SUPABASE_DB_URL");
+alias("REDIS_URL", "KV_URL", "UPSTASH_REDIS_URL", "REDIS_TLS_URL");
 
 const bool = z
   .string()
