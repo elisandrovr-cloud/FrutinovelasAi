@@ -3,14 +3,14 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { ChapterScriptSchema, CreateNovelaSchema, UpdateCharacterSchema } from "@fruti/shared";
 import type { StoryBible } from "@fruti/shared";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod/v4";
-import { env } from "../config";
+import { env, envWarnings, missingEnv } from "../config";
 import { prisma } from "../lib/db";
 import { randomSeed } from "../lib/seed";
 import { contentTypeFor, localPathFor } from "../lib/storage";
-import { designQueue } from "../queues";
+import { designQueue, withQueue, QueueUnavailableError } from "../queues";
 import { listVoices, regenerateCharacter, updateCharacter } from "../services/characters";
 import {
   ConflictError,
@@ -45,15 +45,37 @@ const IdParams = z.object({ id: z.string() });
 const ChapterParams = z.object({ id: z.string(), number: z.coerce.number().int().min(1) });
 
 export async function routes(app: FastifyInstance) {
+  // Configuración incompleta → 503 explicando qué falta (antes: 500 genérico de Vercel)
+  app.addHook("onRequest", async (req, reply) => {
+    if (missingEnv.length && !req.url.endsWith("/health")) {
+      return reply.status(503).send({ error: `Servidor sin configurar: faltan las variables ${missingEnv.join(", ")}` });
+    }
+  });
+
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof z.ZodError) return reply.status(400).send({ error: "Datos inválidos", issues: err.issues });
     if (err instanceof ConflictError) return reply.status(409).send({ error: err.message });
+    if (err instanceof QueueUnavailableError) {
+      app.log.error(err);
+      return reply.status(503).send({ error: "La cola de trabajos (Redis) no está disponible. Revisa REDIS_URL." });
+    }
+    if (err instanceof Prisma.PrismaClientKnownRequestError && (err.code === "P2021" || err.code === "P2022")) {
+      app.log.error(err);
+      return reply.status(503).send({ error: "La base de datos no tiene las tablas: ejecuta `npm run db:deploy -w @fruti/api`." });
+    }
+    if (err instanceof Prisma.PrismaClientInitializationError) {
+      app.log.error(err);
+      return reply.status(503).send({ error: "No se puede conectar a la base de datos. Revisa DATABASE_URL." });
+    }
     const status = (err as { statusCode?: number }).statusCode ?? 500;
     if (status >= 500) app.log.error(err);
     return reply.status(status).send({ error: err.message });
   });
 
-  app.get("/health", async () => ({ ok: true }));
+  app.get("/health", async (_req, reply) => {
+    const ok = missingEnv.length === 0;
+    return reply.status(ok ? 200 : 503).send({ ok, missing: missingEnv, warnings: envWarnings });
+  });
 
   // ------------------------------------------------------------------ novelas
   app.get("/novelas", async (req) => {
@@ -71,7 +93,13 @@ export async function routes(app: FastifyInstance) {
     const novela = await prisma.novela.create({
       data: { ...input, ownerId: owner(req), totalMinutes: Math.round(input.totalMinutes), masterSeed: randomSeed() },
     });
-    await startScript(novela.id);
+    try {
+      await startScript(novela.id);
+    } catch (err) {
+      // Sin cola no se escribirá nunca el guion: no dejar una novela huérfana en el historial
+      await prisma.novela.delete({ where: { id: novela.id } }).catch(() => {});
+      throw err;
+    }
     return reply.status(201).send({ id: novela.id });
   });
 
@@ -161,7 +189,7 @@ export async function routes(app: FastifyInstance) {
   app.post("/characters/:id/regenerate", async (req) => {
     const c = await loadCharacter(req);
     const v = await regenerateCharacter(c.id);
-    await designQueue.add("character", { type: "character", versionId: v.id });
+    await withQueue(() => designQueue.add("character", { type: "character", versionId: v.id }));
     return { ok: true };
   });
 
@@ -170,7 +198,7 @@ export async function routes(app: FastifyInstance) {
     const c = await loadCharacter(req);
     const input = UpdateCharacterSchema.parse(req.body);
     const v = await updateCharacter(c.id, input);
-    if (v) await designQueue.add("character", { type: "character", versionId: v.id });
+    if (v) await withQueue(() => designQueue.add("character", { type: "character", versionId: v.id }));
     return characterDTO(await prisma.character.findUniqueOrThrow({ where: { id: c.id }, include: { versions: true } }));
   });
 

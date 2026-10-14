@@ -23,6 +23,12 @@ export const connection: ConnectionOptions = {
   maxRetriesPerRequest: null,
 };
 
+/**
+ * Conexión para encolar desde la API: sin cola offline, un Redis caído produce
+ * un error inmediato (→ 503) en lugar de dejar la petición colgada.
+ */
+const producerConnection: ConnectionOptions = { ...connection, enableOfflineQueue: false, connectTimeout: 5000 };
+
 export type ScriptJob = { type: "bible"; novelaId: string } | { type: "chapter-script"; novelaId: string; number: number; chain: boolean };
 export type DesignJob = { type: "character"; versionId: string } | { type: "set"; setId: string };
 export type ProductionJob = { novelaId: string; number: number };
@@ -35,15 +41,44 @@ const defaults: JobsOptions = {
   removeOnFail: { age: 14 * 24 * 3600 },
 };
 
-export const scriptQueue = new Queue<ScriptJob, void, string>("script", { connection, defaultJobOptions: defaults });
-export const designQueue = new Queue<DesignJob, void, string>("design", { connection, defaultJobOptions: defaults });
+export const scriptQueue = new Queue<ScriptJob, void, string>("script", { connection: producerConnection, defaultJobOptions: defaults });
+export const designQueue = new Queue<DesignJob, void, string>("design", { connection: producerConnection, defaultJobOptions: defaults });
 export const productionQueue = new Queue<ProductionJob, void, string>("production", {
-  connection,
+  connection: producerConnection,
   defaultJobOptions: { ...defaults, attempts: 2, backoff: { type: "exponential", delay: 120_000 } },
 });
-export const exportQueue = new Queue<ExportJob, void, string>("export", { connection, defaultJobOptions: { ...defaults, attempts: 2 } });
+export const exportQueue = new Queue<ExportJob, void, string>("export", { connection: producerConnection, defaultJobOptions: { ...defaults, attempts: 2 } });
+
+// Sin listener, un evento "error" de ioredis tumbaría el proceso.
+for (const q of [scriptQueue, designQueue, productionQueue, exportQueue]) {
+  q.on("error", (err) => console.error(`[cola ${q.name}] ${err.message}`));
+}
+
+export class QueueUnavailableError extends Error {}
+
+/** Encola con timeout: si Redis no contesta, error claro en vez de petición colgada. */
+export async function withQueue<T>(fn: () => Promise<T>, ms = 5000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      fn(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new QueueUnavailableError("Redis no responde")), ms);
+      }),
+    ]);
+  } catch (err) {
+    if (err instanceof QueueUnavailableError) throw err;
+    const msg = (err as Error).message ?? "";
+    if (/ECONNREFUSED|ENOTFOUND|ETIMEDOUT|Connection is closed|enableOfflineQueue|Stream isn't writeable/i.test(msg)) {
+      throw new QueueUnavailableError(`Redis no disponible: ${msg}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** jobId determinista: evita encolar dos veces el mismo capítulo por doble clic. */
 export function enqueueChapter(novelaId: string, number: number, attempt: number) {
-  return productionQueue.add("chapter", { novelaId, number }, { jobId: `ch_${novelaId}_${number}_${attempt}` });
+  return withQueue(() => productionQueue.add("chapter", { novelaId, number }, { jobId: `ch_${novelaId}_${number}_${attempt}` }));
 }

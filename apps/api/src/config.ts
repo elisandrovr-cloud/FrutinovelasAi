@@ -12,8 +12,10 @@ const EnvSchema = z.object({
   /** Origen público donde se sirve /api (en Vercel, el dominio del proyecto). */
   PUBLIC_API_URL: z.string().default("http://localhost:4000"),
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
-  DATABASE_URL: z.string(),
-  REDIS_URL: z.string().default("redis://localhost:6379"),
+  // Opcionales al parsear: si faltan, la API responde 503 con un mensaje claro
+  // en vez de caerse al importar (en Vercel eso se ve como 500 en todo /api).
+  DATABASE_URL: z.string().optional(),
+  REDIS_URL: z.string().optional(),
 
   // Almacenamiento: "local" (disco, para dev) o "s3" (R2 / S3 / MinIO)
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
@@ -64,5 +66,23 @@ const EnvSchema = z.object({
   WORK_DIR: z.string().default("tmp"),
 });
 
-export const env = EnvSchema.parse(process.env);
+const parsed = EnvSchema.parse(process.env);
+const onVercel = Boolean(process.env.VERCEL);
+
+export const env = { ...parsed, REDIS_URL: parsed.REDIS_URL ?? "redis://localhost:6379" };
 export type Env = typeof env;
+
+/** Variables imprescindibles que faltan (la API devuelve 503 mientras haya alguna). */
+export const missingEnv: string[] = [
+  !parsed.DATABASE_URL && "DATABASE_URL",
+  // En local se asume Redis en localhost; en Vercel no existe, hay que configurarlo.
+  onVercel && !parsed.REDIS_URL && "REDIS_URL",
+  parsed.STORAGE_DRIVER === "s3" && !parsed.S3_ACCESS_KEY_ID && "S3_ACCESS_KEY_ID",
+  parsed.STORAGE_DRIVER === "s3" && !parsed.S3_SECRET_ACCESS_KEY && "S3_SECRET_ACCESS_KEY",
+].filter((x): x is string => Boolean(x));
+
+/** Configuración que funciona pero no es la adecuada para producción. */
+export const envWarnings: string[] = [
+  onVercel && parsed.STORAGE_DRIVER === "local" && "STORAGE_DRIVER=local no persiste en Vercel: usa s3 (R2/S3)",
+  onVercel && parsed.LLM_PROVIDER === "claude" && !parsed.ANTHROPIC_API_KEY && "Falta ANTHROPIC_API_KEY (el worker no podrá escribir guiones)",
+].filter((x): x is string => Boolean(x));

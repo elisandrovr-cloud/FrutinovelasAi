@@ -119,6 +119,16 @@ No hay *bindings*: ningún servicio llama a otro desde el servidor; el navegador
 1. *New Project* → importa el repo con **Root Directory = raíz del repo** (donde está `vercel.json`).
 2. Variables de entorno del proyecto: todas las de `apps/api/.env.example` con `STORAGE_DRIVER=s3`, `PUBLIC_API_URL=https://<tu-dominio>` y `WEB_ORIGIN=https://<tu-dominio>`. Prisma Client se genera en el `postinstall` de `apps/api`.
 3. Pruébalo en local con `vercel dev` (levanta ambos servicios con el enrutado real).
+   Tras desplegar, abre `https://<tu-dominio>/api/health`: devuelve `missing` (variables obligatorias que faltan: `DATABASE_URL`, `REDIS_URL` y, con `STORAGE_DRIVER=s3`, las credenciales S3) y `warnings`. Mientras falte alguna, toda la API responde **503 con el nombre de la variable** en vez de un 500 genérico.
+
+   | Variable obligatoria en Vercel | Ejemplo |
+   |---|---|
+   | `DATABASE_URL` | pooler de Supabase `…:6543/postgres?pgbouncer=true&connection_limit=5` |
+   | `DIRECT_URL` | conexión directa `…:5432/postgres` (migraciones) |
+   | `REDIS_URL` | `rediss://default:<pass>@<host>.upstash.io:6379` |
+   | `STORAGE_DRIVER` + `S3_*` | `s3` + credenciales de R2 |
+
+   Ejecuta las migraciones una vez desde tu máquina (`npm run db:deploy -w @fruti/api` con `DIRECT_URL`) antes de usar la app.
 4. **El worker no corre en Vercel**: los capítulos tardan minutos y usan ffmpeg. Despliega `apps/api/Dockerfile` con `node dist/worker.js` en Railway / Fly.io / Render (sección anterior), apuntando a la misma Postgres, Redis y R2. La función `api` de Vercel solo encola jobs y lee la BD.
 
 Alternativas: solo la web en Vercel (Root Directory `apps/web`, `NEXT_PUBLIC_API_URL=https://api.tudominio.com`) con la API en el contenedor, o `apps/web/Dockerfile` (`output: "standalone"`) en cualquier host.

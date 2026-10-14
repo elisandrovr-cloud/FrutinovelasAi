@@ -9,24 +9,24 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/db";
 import { assignVoices } from "./characters";
-import { designQueue, enqueueChapter, exportQueue, scriptQueue } from "../queues";
+import { designQueue, enqueueChapter, exportQueue, scriptQueue, withQueue } from "../queues";
 
 export class ConflictError extends Error {}
 
 export async function startScript(novelaId: string) {
   await prisma.novela.update({ where: { id: novelaId }, data: { status: "SCRIPTING", error: null } });
-  await scriptQueue.add("bible", { type: "bible", novelaId });
+  await withQueue(() => scriptQueue.add("bible", { type: "bible", novelaId }));
 }
 
 /** Tras la biblia: guiones de capítulos en cadena (cada uno necesita el endState del anterior). */
 export async function onBibleReady(novelaId: string) {
-  await scriptQueue.add("chapter-script", { type: "chapter-script", novelaId, number: 1, chain: true });
+  await withQueue(() => scriptQueue.add("chapter-script", { type: "chapter-script", novelaId, number: 1, chain: true }));
 }
 
 export async function onChapterScripted(novelaId: string, number: number, chain: boolean) {
   const novela = await prisma.novela.findUniqueOrThrow({ where: { id: novelaId } });
   if (chain && number < novela.chapterCount) {
-    await scriptQueue.add("chapter-script", { type: "chapter-script", novelaId, number: number + 1, chain: true });
+    await withQueue(() => scriptQueue.add("chapter-script", { type: "chapter-script", novelaId, number: number + 1, chain: true }));
   } else if (novela.status === "SCRIPTING") {
     const missing = await prisma.chapter.count({ where: { novelaId, script: { equals: Prisma.DbNull } } });
     if (missing === 0) await prisma.novela.update({ where: { id: novelaId }, data: { status: "SCRIPT_READY" } });
@@ -37,7 +37,7 @@ export async function onChapterScripted(novelaId: string, number: number, chain:
 export async function regenerateChapterScript(novelaId: string, number: number, cascade: boolean) {
   // Reintento tras un fallo del guion: la novela vuelve a "escribiendo"
   await prisma.novela.updateMany({ where: { id: novelaId, status: "FAILED", chapters: { some: { script: { equals: Prisma.DbNull } } } }, data: { status: "SCRIPTING", error: null } });
-  await scriptQueue.add("chapter-script", { type: "chapter-script", novelaId, number, chain: cascade });
+  await withQueue(() => scriptQueue.add("chapter-script", { type: "chapter-script", novelaId, number, chain: cascade }));
 }
 
 export async function startDesign(novelaId: string, characterIds?: string[]) {
@@ -56,9 +56,9 @@ export async function startDesign(novelaId: string, characterIds?: string[]) {
   for (const c of characters) {
     const v = c.versions[0];
     await prisma.characterVersion.update({ where: { id: v.id }, data: { status: "PENDING" } });
-    await designQueue.add("character", { type: "character", versionId: v.id });
+    await withQueue(() => designQueue.add("character", { type: "character", versionId: v.id }));
   }
-  if (!characterIds) for (const s of novela.sets.filter((x) => !x.referenceImageKey)) await designQueue.add("set", { type: "set", setId: s.id });
+  if (!characterIds) for (const s of novela.sets.filter((x) => !x.referenceImageKey)) await withQueue(() => designQueue.add("set", { type: "set", setId: s.id }));
 }
 
 export async function onDesignProgress(novelaId: string) {
@@ -118,6 +118,6 @@ export async function pauseProduction(novelaId: string) {
 
 export async function requestExport(novelaId: string, kind: "ZIP" | "LONG_VIDEO" | "VERTICAL_SERIES") {
   const exp = await prisma.export.create({ data: { novelaId, kind } });
-  await exportQueue.add("export", { exportId: exp.id });
+  await withQueue(() => exportQueue.add("export", { exportId: exp.id }));
   return exp;
 }
