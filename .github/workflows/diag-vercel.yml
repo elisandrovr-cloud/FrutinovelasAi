@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Probar URLs
         run: |
-          for base in https://frutinovelasai.vercel.app https://frutinovelasai-evr2.vercel.app https://frutinovelasai-qsc4agwed-evr2.vercel.app; do
+          for base in https://frutinovelasai.vercel.app; do
             for p in / /novelas /api/health /api/novelas /api/voices; do
               echo "=================== $base$p"
               curl -sS -m 30 -D - -H 'x-owner-id: diag-12345678' "$base$p" -o body.txt || true
