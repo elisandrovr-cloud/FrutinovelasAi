@@ -1,0 +1,22 @@
+# Temporal: diagnóstico del despliegue de Vercel (se borrará al terminar)
+name: diag-vercel
+on:
+  push:
+    paths: [".github/workflows/diag-vercel.yml", ".github/diag-run"]
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probar URLs
+        run: |
+          for base in https://frutinovelasai.vercel.app https://frutinovelasai-evr2.vercel.app https://frutinovelasai-qsc4agwed-evr2.vercel.app; do
+            for p in / /novelas /api/health /api/novelas /api/voices; do
+              echo "=================== $base$p"
+              curl -sS -m 30 -D - -H 'x-owner-id: diag-12345678' "$base$p" -o body.txt || true
+              head -c 1500 body.txt; echo
+            done
+          done
+          echo "=================== POST /api/novelas"
+          curl -sS -m 30 -D - -X POST https://frutinovelasai.vercel.app/api/novelas -H 'x-owner-id: diag-12345678' -H 'content-type: application/json' -d '{"prompt":"Una piña celosa y un mango infiel","genres":["drama"],"chapterCount":8,"totalMinutes":12}' -o body.txt || true
+          head -c 1500 body.txt; echo
